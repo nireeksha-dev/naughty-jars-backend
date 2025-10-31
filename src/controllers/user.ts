@@ -41,19 +41,24 @@ export const loginUser = async (req: Request, res: Response) => {
       console.log("Entered:", password);
       console.log("Match?", isMatch);
       return res.status(401).json({ message: "Invalid credentials" });
-      
     }
 
-    // const token = jwt.sign(
-    //   { id: user._id, email: user.email },
-    //   process.env.JWT_SECRET!,
-    //   { expiresIn: "1d" }
-    // );
+    const token = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_SECRET!,
+      { expiresIn: "1d" }
+    );
+    console.log("JWT_SECRET:", process.env.JWT_SECRET);
 
     res.json({
       message: "Login successful",
-      // token,
-      user: { _id: user._id, username: user.username, email: user.email },
+      token,
+      user: {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
     });
     console.log("User logged in:", user);
   } catch (err) {
