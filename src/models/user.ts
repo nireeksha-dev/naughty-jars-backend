@@ -1,3 +1,4 @@
+// models/user.ts
 import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 
@@ -5,7 +6,8 @@ export interface IUser extends Document {
   username: string;
   email: string;
   password: string;
-  role: "user" | "admin";
+  role: "user" | "admin" | "crew";
+  isAdmin: boolean;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -14,7 +16,7 @@ const UserSchema: Schema<IUser> = new Schema<IUser>(
     username: { type: String, required: true, unique: true },
     email: { type: String, required: true, unique: true, lowercase: true },
     password: { type: String, required: true, minlength: 6 },
-    role: { type: String, enum: ["user", "admin"], default: "user" },
+    role: { type: String, enum: ["user", "admin", "crew"], default: "user" },
   },
   { timestamps: true }
 );
@@ -37,5 +39,15 @@ UserSchema.methods.comparePassword = function (
 ): Promise<boolean> {
   return bcrypt.compare(candidatePassword, this.password);
 };
+
+// Virtual for isAdmin
+UserSchema.virtual("isAdmin").get(function (this: IUser) {
+  return this.role === "admin";
+});
+
+// Ensure virtual fields are serialized
+UserSchema.set("toJSON", {
+  virtuals: true,
+});
 
 export default mongoose.model<IUser>("User", UserSchema);
