@@ -7,6 +7,7 @@ export interface IProduct extends Document {
   weight: string;
   description?: string;
   reviews?: number;
+  type: string;
 }
 
 const ProductSchema: Schema<IProduct> = new Schema<IProduct>(
@@ -17,6 +18,7 @@ const ProductSchema: Schema<IProduct> = new Schema<IProduct>(
     weight: { type: String, required: true },
     description: { type: String },
     reviews: { type: Number },
+    type: { type: String, required: true },
   },
   { timestamps: true }
 );
