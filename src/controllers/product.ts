@@ -9,14 +9,14 @@ export const addProduct = async (req: Request, res: Response) => {
       price, 
       weight, 
       type, 
-      category,
       stock,
       tags,
-      isFeatured 
+      isFeatured,
+      status
     } = req.body;
     
     const images = req.body.images || [];
-    const thumbnail = req.body.thumbnail || (images.length > 0 ? images[0] : null);
+    const thumbnailImage = req.body.thumbnailImage || (images.length > 0 ? images[0] : null);
 
     // Validation
     if (!name || !price || !description || !weight || !type) {
@@ -26,25 +26,52 @@ export const addProduct = async (req: Request, res: Response) => {
       });
     }
 
+    // Generate slug from name
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+
     // Create product with all fields
     const product = await Product.create({ 
-      name, 
+      name,
+      slug,
       description, 
       price: parseFloat(price),
       weight,
       type,
       images,
-      thumbnail,
-      category: category || undefined,
+      thumbnailImage,
       stock: parseInt(stock) || 0,
       tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim())) : [],
-      isFeatured: isFeatured === 'true' || isFeatured === true
+      isFeatured: isFeatured === 'true' || isFeatured === true,
+      status: status || "draft"
     });
+
+    // Format response to match UI structure
+    const formattedProduct = {
+      id: product._id.toString(),
+      name: product.name,
+      slug: product.slug,
+      description: product.description,
+      price: product.price,
+      images: product.images,
+      thumbnailImage: product.thumbnailImage,
+      weight: product.weight,
+      reviews: product.reviews,
+      type: product.type,
+      stock: product.stock,
+      isFeatured: product.isFeatured,
+      tags: product.tags,
+      status: product.status,
+      createdAt: product.createdAt.toISOString()
+    };
 
     res.status(201).json({
       success: true,
       message: "Product created successfully",
-      product
+      product: formattedProduct
     });
   } catch (err: any) {
     res.status(500).json({ 
@@ -73,9 +100,14 @@ export const updateProduct = async (req: Request, res: Response) => {
       updateData.isFeatured = updateData.isFeatured === 'true' || updateData.isFeatured === true;
     }
     
-    // If new images are uploaded, update thumbnail if not explicitly set
-    if (updateData.images && updateData.images.length > 0 && !updateData.thumbnail) {
-      updateData.thumbnail = updateData.images[0];
+    // Handle status changes
+    if (updateData.status === "published" && !req.body.publishedAt) {
+      updateData.publishedAt = new Date();
+    }
+    
+    // If new images are uploaded, update thumbnailImage if not explicitly set
+    if (updateData.images && updateData.images.length > 0 && !updateData.thumbnailImage) {
+      updateData.thumbnailImage = updateData.images[0];
     }
 
     const product = await Product.findByIdAndUpdate(req.params.id, updateData, {
@@ -86,11 +118,30 @@ export const updateProduct = async (req: Request, res: Response) => {
       success: false,
       message: "Product not found" 
     });
+
+    // Format response to match UI structure
+    const formattedProduct = {
+      id: product._id.toString(),
+      name: product.name,
+      slug: product.slug,
+      description: product.description,
+      price: product.price,
+      images: product.images,
+      thumbnailImage: product.thumbnailImage,
+      weight: product.weight,
+      reviews: product.reviews,
+      type: product.type,
+      stock: product.stock,
+      isFeatured: product.isFeatured,
+      tags: product.tags,
+      status: product.status,
+      createdAt: product.createdAt.toISOString()
+    };
     
     res.json({
       success: true,
       message: "Product updated successfully",
-      product
+      product: formattedProduct
     });
   } catch (err: any) {
     res.status(500).json({ 
@@ -126,12 +177,29 @@ export const getProductDetails = async (req: Request, res: Response) => {
       success: false,
       message: "Product not found" 
     });
-    
-    // Increment view count or similar analytics could be added here
+
+    // Format response to match UI structure
+    const formattedProduct = {
+      id: product._id.toString(),
+      name: product.name,
+      slug: product.slug,
+      description: product.description,
+      price: product.price,
+      images: product.images,
+      thumbnailImage: product.thumbnailImage,
+      weight: product.weight,
+      reviews: product.reviews,
+      type: product.type,
+      stock: product.stock,
+      isFeatured: product.isFeatured,
+      tags: product.tags,
+      status: product.status,
+      createdAt: product.createdAt.toISOString()
+    };
     
     res.json({
       success: true,
-      product
+      product: formattedProduct
     });
   } catch (err: any) {
     res.status(500).json({ 
@@ -152,7 +220,8 @@ export const getAllProducts = async (req: Request, res: Response) => {
       page = 1,
       limit = 20,
       featured,
-      tags
+      tags,
+      status
     } = req.query;
     
     const filter: any = {};
@@ -162,6 +231,7 @@ export const getAllProducts = async (req: Request, res: Response) => {
     if (category) filter.category = category;
     if (type) filter.type = type;
     if (featured === 'true') filter.isFeatured = true;
+    if (status) filter.status = status;
     
     // Price range filter
     if (minPrice || maxPrice) {
@@ -187,16 +257,34 @@ export const getAllProducts = async (req: Request, res: Response) => {
     
     const [products, total] = await Promise.all([
       Product.find(filter)
-        .select('name price images thumbnail weight description type category stock isFeatured tags')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit as string)),
       Product.countDocuments(filter)
     ]);
+
+    // Format products to match UI structure
+    const formattedProducts = products.map(product => ({
+      id: product._id.toString(),
+      name: product.name,
+      slug: product.slug,
+      description: product.description,
+      price: product.price,
+      images: product.images,
+      thumbnailImage: product.thumbnailImage,
+      weight: product.weight,
+      reviews: product.reviews,
+      type: product.type,
+      stock: product.stock,
+      isFeatured: product.isFeatured,
+      tags: product.tags,
+      status: product.status,
+      createdAt: product.createdAt.toISOString()
+    }));
     
     res.json({
       success: true,
-      products,
+      products: formattedProducts,
       pagination: {
         total,
         page: parseInt(page as string),
@@ -212,16 +300,80 @@ export const getAllProducts = async (req: Request, res: Response) => {
   }
 };
 
-// Additional controller for featured products
-export const getFeaturedProducts = async (req: Request, res: Response) => {
+// Get published products for frontend
+export const getPublishedProducts = async (req: Request, res: Response) => {
   try {
-    const products = await Product.find({ isFeatured: true })
-      .select('name price thumbnail weight type')
-      .limit(10);
+    const { 
+      page = 1, 
+      limit = 12, 
+      category, 
+      type,
+      minPrice,
+      maxPrice,
+      search,
+      featured
+    } = req.query;
     
+    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+    
+    const filter: any = { status: "published" };
+    
+    // Apply filters
+    if (category) filter.category = category;
+    if (type) filter.type = type;
+    if (featured === 'true') filter.isFeatured = true;
+    
+    // Price range filter
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = parseFloat(minPrice as string);
+      if (maxPrice) filter.price.$lte = parseFloat(maxPrice as string);
+    }
+    
+    // Search filter
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const [products, total] = await Promise.all([
+      Product.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit as string)),
+      Product.countDocuments(filter)
+    ]);
+
+    // Format products
+    const formattedProducts = products.map(product => ({
+      id: product._id.toString(),
+      name: product.name,
+      slug: product.slug,
+      description: product.description,
+      price: product.price,
+      images: product.images,
+      thumbnailImage: product.thumbnailImage,
+      weight: product.weight,
+      reviews: product.reviews,
+      type: product.type,
+      stock: product.stock,
+      isFeatured: product.isFeatured,
+      tags: product.tags,
+      createdAt: product.createdAt.toISOString()
+    }));
+
     res.json({
       success: true,
-      products
+      products: formattedProducts,
+      pagination: {
+        total,
+        page: parseInt(page as string),
+        pages: Math.ceil(total / parseInt(limit as string)),
+        limit: parseInt(limit as string)
+      }
     });
   } catch (err: any) {
     res.status(500).json({ 
@@ -231,17 +383,32 @@ export const getFeaturedProducts = async (req: Request, res: Response) => {
   }
 };
 
-// Controller for uploading product images
-export const uploadProductImages = async (req: any, res: Response) => {
+export const getFeaturedProducts = async (req: Request, res: Response) => {
   try {
-    // This middleware will handle the upload via processAndUploadImages
-    // Images will be available in req.body.images
+    const products = await Product.find({ 
+      isFeatured: true,
+      status: "published"
+    })
+    .limit(10);
+
+    // Format products
+    const formattedProducts = products.map(product => ({
+      id: product._id.toString(),
+      name: product.name,
+      slug: product.slug,
+      description: product.description,
+      price: product.price,
+      images: product.images,
+      thumbnailImage: product.thumbnailImage,
+      weight: product.weight,
+      reviews: product.reviews,
+      type: product.type,
+      createdAt: product.createdAt.toISOString()
+    }));
     
     res.json({
       success: true,
-      images: req.body.images || [],
-      thumbnail: req.body.thumbnail || null,
-      message: "Images uploaded successfully"
+      products: formattedProducts
     });
   } catch (err: any) {
     res.status(500).json({ 

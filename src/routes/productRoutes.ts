@@ -6,45 +6,35 @@ import {
   getAllProducts,
   getProductDetails,
   getFeaturedProducts,
-  uploadProductImages
+  getPublishedProducts
 } from "../controllers/product";
 import { authenticateJWT } from "../middlewares/auth";
 import { requireAdmin } from "../middlewares/adminAuth";
-import { upload, processAndUploadImages } from "../middlewares/multer";
+import { uploadSingleImage, processSingleImage } from "../middlewares/multer";
+import { uploadImages } from "../middlewares/testMulter";
+
 
 const router = Router();
 
 // Public routes
-router.get("/", getAllProducts);
+router.get("/published", getPublishedProducts);
 router.get("/featured", getFeaturedProducts);
 router.get("/:id", getProductDetails);
 
-// Image upload endpoint (for separate image uploads)
-router.post("/upload", 
-  authenticateJWT, 
-  requireAdmin,
-  upload,
-  processAndUploadImages,
-  uploadProductImages
-);
-
-// Admin routes
+// Admin routes with image upload support
+// Admin routes with image upload support
 router.post("/", 
-  authenticateJWT, 
-  requireAdmin,
-  upload,
-  processAndUploadImages,
+  uploadImages.fields([
+  { name: "image", maxCount: 1 }
+]),
   addProduct
 );
 
-router.put("/:id", 
-  authenticateJWT, 
-  requireAdmin,
-  upload,
-  processAndUploadImages,
-  updateProduct
-);
+router.put("/:id", authenticateJWT, requireAdmin, uploadImages.fields([
+  { name: "image", maxCount: 1 }
+]), updateProduct);
 
 router.delete("/:id", authenticateJWT, requireAdmin, deleteProduct);
+router.get("/", authenticateJWT, requireAdmin, getAllProducts);
 
 export default router;

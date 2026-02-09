@@ -1,10 +1,13 @@
 import { Request, Response } from "express";
 import Crew from "../models/crew";
 import User from "../models/user"; // Assuming you have a User model
+import { saveImages } from "../utils/saveImages";
 
 export const createCrew = async (req: Request, res: Response) => {
   try {
-    const { name, position, contact, email, description, image, status } = req.body;
+    const { name, position, contact, email, description, status } = req.body;
+
+    const imageFile = (req.files as any)?.image?.[0];
 
     // Validate input
     if (!name || !position || !contact || !email || !description) {
@@ -23,6 +26,8 @@ export const createCrew = async (req: Request, res: Response) => {
       });
     }
 
+      const [imageUrl] = await saveImages([imageFile], { folder: "transfer" });
+
     // Create crew member
     const crew = await Crew.create({ 
       name, 
@@ -30,7 +35,7 @@ export const createCrew = async (req: Request, res: Response) => {
       contact, 
       email, 
       description,
-      image: image || "https://picsum.photos/200/200?random=" + Math.random(), // Default image if none provided
+      image: imageUrl, // Default image if none provided
       status: status || "active"
     });
 
@@ -119,28 +124,71 @@ export const getCrewById = async (req: Request, res: Response) => {
   }
 };
 
-export const updateCrew = async (req: Request, res: Response) => {
+export const updateCrew = async (req: Request, res: Response): Promise<void> => {
   try {
-    const crew = await Crew.findByIdAndUpdate(
-      req.params.id, 
-      req.body, 
-      { new: true }
+    const { id } = req.params;
+    const updates = req.body;
+
+    // Define restricted fields that cannot be updated
+    const restrictedFields = ['_id', 'createdAt', 'updatedAt', '__v'];
+    restrictedFields.forEach(field => delete updates[field]);
+
+    // Check if email is being updated and validate uniqueness
+    if (updates.email) {
+      const existingCrew = await Crew.findOne({ 
+        email: updates.email, 
+        _id: { $ne: id } 
+      });
+      
+      if (existingCrew) {
+        res.status(409).json({ 
+          success: false,
+          message: "Crew with this email already exists" 
+        });
+        return;
+      }
+    }
+
+    // Handle image update if provided
+    const imageFile = (req.files as any)?.image?.[0];
+    if (imageFile) {
+      const [imageUrl] = await saveImages([imageFile], { folder: "transfer" });
+      updates.image = imageUrl;
+    }
+
+    const updatedCrew = await Crew.findByIdAndUpdate(
+      id, 
+      { $set: updates }, 
+      { new: true, runValidators: true }
     );
-    
-    if (!crew) return res.status(404).json({ 
-      success: false,
-      message: "Crew member not found" 
-    });
-    
+
+    if (!updatedCrew) {
+      res.status(404).json({ 
+        success: false,
+        message: "Crew member not found" 
+      });
+      return;
+    }
+
     res.json({
       success: true,
       message: "Crew member updated successfully",
-      crew
+      crew: updatedCrew
     });
-  } catch (err) {
+
+  } catch (error: any) {
+    if (error.name === 'ValidationError') {
+      res.status(400).json({ 
+        success: false,
+        error: "Validation Error", 
+        details: error.message 
+      });
+      return;
+    }
+    
     res.status(500).json({ 
       success: false,
-      error: (err as Error).message 
+      error: error.message 
     });
   }
 };

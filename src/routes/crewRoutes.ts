@@ -1,3 +1,4 @@
+// crewRoutes.ts
 import express from "express";
 import {
   createCrew,
@@ -9,37 +10,35 @@ import {
 } from "../controllers/crew";
 import { authenticateJWT } from "../middlewares/auth";
 import { requireAdmin } from "../middlewares/adminAuth";
-import { upload, processAndUploadImages } from "../middlewares/multer";
+import { uploadImages } from "../middlewares/testMulter";
+
 const router = express.Router();
 
-// Admin routes with image upload support
+// Public routes (no authentication needed)
+router.get("/", getAllCrew);
+router.get("/:id", getCrewById);
+
+// Protected routes (require authentication)
 router.post("/", 
-  authenticateJWT, 
-  requireAdmin,
-  upload,
-  processAndUploadImages,
+  authenticateJWT, // Add authentication
+  requireAdmin, // Add admin check
+  uploadImages.fields([{ name: "image", maxCount: 1 }]),
   createCrew
 );
 
 router.put("/:id", 
-  authenticateJWT, 
-  requireAdmin,
-  upload,
-  processAndUploadImages,
+  authenticateJWT, // Add authentication
+  requireAdmin, // Add admin check
+  uploadImages.fields([{ name: "image", maxCount: 1 }]),
   updateCrew
 );
 
-// Bulk status update
-router.put("/status/bulk", 
-  authenticateJWT, 
-  requireAdmin,
-  updateCrewStatus
+router.delete("/:id", 
+  authenticateJWT, // Already has this
+  requireAdmin, // Already has this
+  deleteCrew
 );
 
-// Public routes (can add authentication if needed)
-router.get("/", getAllCrew);
-router.get("/:id", getCrewById);
 
-router.delete("/:id", authenticateJWT, requireAdmin, deleteCrew);
 
 export default router;
