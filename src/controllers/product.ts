@@ -1,8 +1,12 @@
 import Product from "../models/product";
 import { Request, Response } from "express";
+import { saveImages } from "../utils/saveImages";
 
 export const addProduct = async (req: Request, res: Response) => {
   try {
+    console.log("Request body:", req.body);
+    console.log("Request files:", req.files);
+
     const { 
       name, 
       description, 
@@ -14,9 +18,17 @@ export const addProduct = async (req: Request, res: Response) => {
       isFeatured,
       status
     } = req.body;
+
+    // Handle image uploads - for array uploads, req.files is an array directly
+    let images: string[] = [];
     
-    const images = req.body.images || [];
-    const thumbnailImage = req.body.thumbnailImage || (images.length > 0 ? images[0] : null);
+    // Check for uploaded files - now req.files is an array, not an object
+    const files = req.files as Express.Multer.File[];
+    if (files && files.length > 0) {
+      console.log(`Processing ${files.length} images`);
+      images = await saveImages(files, { folder: "products" });
+      console.log("Saved images:", images);
+    }
 
     // Validation
     if (!name || !price || !description || !weight || !type) {
@@ -33,23 +45,32 @@ export const addProduct = async (req: Request, res: Response) => {
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-");
 
-    // Create product with all fields
+    // Parse tags
+    let parsedTags: string[] = [];
+    if (tags) {
+      if (Array.isArray(tags)) {
+        parsedTags = tags;
+      } else if (typeof tags === 'string') {
+        parsedTags = tags.split(',').map((tag: string) => tag.trim());
+      }
+    }
+
+    // Create product
     const product = await Product.create({ 
-      name,
+      name: name.trim(),
       slug,
-      description, 
+      description: description.trim(), 
       price: parseFloat(price),
-      weight,
-      type,
+      weight: weight.trim(),
+      type: type.trim(),
       images,
-      thumbnailImage,
       stock: parseInt(stock) || 0,
-      tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim())) : [],
+      tags: parsedTags,
       isFeatured: isFeatured === 'true' || isFeatured === true,
       status: status || "draft"
     });
 
-    // Format response to match UI structure
+    // Format response
     const formattedProduct = {
       id: product._id.toString(),
       name: product.name,
@@ -57,7 +78,6 @@ export const addProduct = async (req: Request, res: Response) => {
       description: product.description,
       price: product.price,
       images: product.images,
-      thumbnailImage: product.thumbnailImage,
       weight: product.weight,
       reviews: product.reviews,
       type: product.type,
@@ -74,6 +94,7 @@ export const addProduct = async (req: Request, res: Response) => {
       product: formattedProduct
     });
   } catch (err: any) {
+    console.error("Create product error:", err);
     res.status(500).json({ 
       success: false,
       error: err.message 
@@ -83,41 +104,55 @@ export const addProduct = async (req: Request, res: Response) => {
 
 export const updateProduct = async (req: Request, res: Response) => {
   try { 
-    const updateData = { ...req.body };
+    const { id } = req.params;
+    const updates: any = { ...req.body };
+    
+    // Handle image uploads for update - now req.files is an array
+    const files = req.files as Express.Multer.File[];
+    if (files && files.length > 0) {
+      // Save new images
+      const newImages = await saveImages(files, { folder: "products" });
+      
+      // Get existing images from request or keep existing
+      let existingImages: string[] = [];
+      if (req.body.existingImages) {
+        try {
+          existingImages = JSON.parse(req.body.existingImages);
+        } catch {
+          existingImages = [];
+        }
+      }
+      
+      // Combine existing and new images
+      updates.images = [...existingImages, ...newImages];
+    }
     
     // Handle numeric fields
-    if (updateData.price) updateData.price = parseFloat(updateData.price);
-    if (updateData.stock) updateData.stock = parseInt(updateData.stock);
-    if (updateData.reviews) updateData.reviews = parseInt(updateData.reviews);
+    if (updates.price) updates.price = parseFloat(updates.price);
+    if (updates.stock) updates.stock = parseInt(updates.stock);
+    if (updates.reviews) updates.reviews = parseInt(updates.reviews);
     
     // Handle tags if provided as string
-    if (updateData.tags && typeof updateData.tags === 'string') {
-      updateData.tags = updateData.tags.split(',').map(tag => tag.trim());
+    if (updates.tags && typeof updates.tags === 'string') {
+      updates.tags = updates.tags.split(',').map((tag: string) => tag.trim());
     }
     
     // Handle boolean field
-    if (updateData.isFeatured !== undefined) {
-      updateData.isFeatured = updateData.isFeatured === 'true' || updateData.isFeatured === true;
-    }
-    
-    // Handle status changes
-    if (updateData.status === "published" && !req.body.publishedAt) {
-      updateData.publishedAt = new Date();
-    }
-    
-    // If new images are uploaded, update thumbnailImage if not explicitly set
-    if (updateData.images && updateData.images.length > 0 && !updateData.thumbnailImage) {
-      updateData.thumbnailImage = updateData.images[0];
+    if (updates.isFeatured !== undefined) {
+      updates.isFeatured = updates.isFeatured === 'true' || updates.isFeatured === true;
     }
 
-    const product = await Product.findByIdAndUpdate(req.params.id, updateData, {
+    const product = await Product.findByIdAndUpdate(id, updates, {
       new: true,
+      runValidators: true
     });
     
-    if (!product) return res.status(404).json({ 
-      success: false,
-      message: "Product not found" 
-    });
+    if (!product) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Product not found" 
+      });
+    }
 
     // Format response to match UI structure
     const formattedProduct = {
@@ -127,7 +162,6 @@ export const updateProduct = async (req: Request, res: Response) => {
       description: product.description,
       price: product.price,
       images: product.images,
-      thumbnailImage: product.thumbnailImage,
       weight: product.weight,
       reviews: product.reviews,
       type: product.type,
@@ -144,6 +178,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       product: formattedProduct
     });
   } catch (err: any) {
+    console.error("Update product error:", err);
     res.status(500).json({ 
       success: false,
       error: err.message 
@@ -151,18 +186,22 @@ export const updateProduct = async (req: Request, res: Response) => {
   }
 };
 
+
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
     const product = await Product.findByIdAndDelete(req.params.id);
-    if (!product) return res.status(404).json({ 
-      success: false,
-      message: "Product not found" 
-    });
+    if (!product) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Product not found" 
+      });
+    }
     res.json({ 
       success: true,
       message: "Product deleted successfully" 
     });
   } catch (err: any) {
+    console.error("Delete product error:", err);
     res.status(500).json({ 
       success: false,
       error: err.message 
@@ -173,12 +212,13 @@ export const deleteProduct = async (req: Request, res: Response) => {
 export const getProductDetails = async (req: Request, res: Response) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ 
-      success: false,
-      message: "Product not found" 
-    });
+    if (!product) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Product not found" 
+      });
+    }
 
-    // Format response to match UI structure
     const formattedProduct = {
       id: product._id.toString(),
       name: product.name,
@@ -186,7 +226,6 @@ export const getProductDetails = async (req: Request, res: Response) => {
       description: product.description,
       price: product.price,
       images: product.images,
-      thumbnailImage: product.thumbnailImage,
       weight: product.weight,
       reviews: product.reviews,
       type: product.type,
@@ -202,6 +241,7 @@ export const getProductDetails = async (req: Request, res: Response) => {
       product: formattedProduct
     });
   } catch (err: any) {
+    console.error("Get product details error:", err);
     res.status(500).json({ 
       success: false,
       error: err.message 
@@ -212,7 +252,6 @@ export const getProductDetails = async (req: Request, res: Response) => {
 export const getAllProducts = async (req: Request, res: Response) => {
   try {
     const { 
-      category, 
       type, 
       minPrice, 
       maxPrice, 
@@ -228,7 +267,6 @@ export const getAllProducts = async (req: Request, res: Response) => {
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     
     // Apply filters
-    if (category) filter.category = category;
     if (type) filter.type = type;
     if (featured === 'true') filter.isFeatured = true;
     if (status) filter.status = status;
@@ -271,7 +309,6 @@ export const getAllProducts = async (req: Request, res: Response) => {
       description: product.description,
       price: product.price,
       images: product.images,
-      thumbnailImage: product.thumbnailImage,
       weight: product.weight,
       reviews: product.reviews,
       type: product.type,
@@ -293,6 +330,7 @@ export const getAllProducts = async (req: Request, res: Response) => {
       }
     });
   } catch (err: any) {
+    console.error("Get all products error:", err);
     res.status(500).json({ 
       success: false,
       error: err.message 
@@ -306,7 +344,6 @@ export const getPublishedProducts = async (req: Request, res: Response) => {
     const { 
       page = 1, 
       limit = 12, 
-      category, 
       type,
       minPrice,
       maxPrice,
@@ -319,7 +356,6 @@ export const getPublishedProducts = async (req: Request, res: Response) => {
     const filter: any = { status: "published" };
     
     // Apply filters
-    if (category) filter.category = category;
     if (type) filter.type = type;
     if (featured === 'true') filter.isFeatured = true;
     
@@ -355,7 +391,6 @@ export const getPublishedProducts = async (req: Request, res: Response) => {
       description: product.description,
       price: product.price,
       images: product.images,
-      thumbnailImage: product.thumbnailImage,
       weight: product.weight,
       reviews: product.reviews,
       type: product.type,
@@ -376,6 +411,7 @@ export const getPublishedProducts = async (req: Request, res: Response) => {
       }
     });
   } catch (err: any) {
+    console.error("Get published products error:", err);
     res.status(500).json({ 
       success: false,
       error: err.message 
@@ -399,7 +435,6 @@ export const getFeaturedProducts = async (req: Request, res: Response) => {
       description: product.description,
       price: product.price,
       images: product.images,
-      thumbnailImage: product.thumbnailImage,
       weight: product.weight,
       reviews: product.reviews,
       type: product.type,
@@ -411,6 +446,7 @@ export const getFeaturedProducts = async (req: Request, res: Response) => {
       products: formattedProducts
     });
   } catch (err: any) {
+    console.error("Get featured products error:", err);
     res.status(500).json({ 
       success: false,
       error: err.message 

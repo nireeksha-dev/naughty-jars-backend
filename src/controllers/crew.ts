@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import Crew from "../models/crew";
-import User from "../models/user"; // Assuming you have a User model
 import { saveImages } from "../utils/saveImages";
 
 export const createCrew = async (req: Request, res: Response) => {
