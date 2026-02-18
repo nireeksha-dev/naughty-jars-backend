@@ -10,6 +10,7 @@ import crewRoutes from "./routes/crewRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import testimonialRoutes from "./routes/testimonialRoutes"
 import blogRoutes from "./routes/blogRoutes"
+import likeRoutes from "./routes/likeRoutes";
 
 const app = express();
 app.use(express.json());
@@ -31,6 +32,7 @@ app.use("/api/crew", crewRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/testimonials", testimonialRoutes);
 app.use("/api/blog", blogRoutes);
+app.use("/api/likes", likeRoutes) // Import like routes
 
 app.get("/", (req, res) => {
   res.send("API is running...");

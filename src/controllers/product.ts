@@ -1,6 +1,7 @@
 import Product from "../models/product";
 import { Request, Response } from "express";
 import { saveImages } from "../utils/saveImages";
+import mongoose from "mongoose";
 
 export const addProduct = async (req: Request, res: Response) => {
   try {
@@ -208,10 +209,34 @@ export const deleteProduct = async (req: Request, res: Response) => {
     });
   }
 };
-
+// controllers/product.ts - Update getProductDetails
 export const getProductDetails = async (req: Request, res: Response) => {
   try {
-    const product = await Product.findById(req.params.id);
+    const { id } = req.params;
+    const userId = (req as any).user?.id;
+    const userRole = (req as any).user?.role;
+
+    // Check if it's a valid ObjectId format
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(id);
+    
+    let product;
+    if (isValidObjectId) {
+      // If admin, populate likes with user details
+      if (userRole === 'admin') {
+        product = await Product.findById(id)
+          .populate({
+            path: 'likes',
+            select: 'username email role createdAt'
+          });
+      } else {
+        product = await Product.findById(id);
+      }
+    }
+    
+    if (!product) {
+      product = await Product.findOne({ slug: id });
+    }
+    
     if (!product) {
       return res.status(404).json({ 
         success: false,
@@ -219,7 +244,8 @@ export const getProductDetails = async (req: Request, res: Response) => {
       });
     }
 
-    const formattedProduct = {
+    // Base product info
+    const formattedProduct: any = {
       id: product._id.toString(),
       name: product.name,
       slug: product.slug,
@@ -233,8 +259,26 @@ export const getProductDetails = async (req: Request, res: Response) => {
       isFeatured: product.isFeatured,
       tags: product.tags,
       status: product.status,
-      createdAt: product.createdAt.toISOString()
+      createdAt: product.createdAt.toISOString(),
+      likeCount: product.likeCount || 0,
+      liked: userId ? product.likes?.some((like: any) => 
+        like._id ? like._id.toString() === userId : like.toString() === userId
+      ) : false
     };
+
+    // If admin, include detailed like information
+    if (userRole === 'admin' && product.likes) {
+      formattedProduct.likesDetails = {
+        total: product.likeCount || 0,
+        users: product.likes.map((user: any) => ({
+          id: user._id || user,
+          username: user.username || 'Unknown',
+          email: user.email || 'No email',
+          role: user.role || 'user',
+          likedAt: user.createdAt || null
+        }))
+      };
+    }
     
     res.json({
       success: true,

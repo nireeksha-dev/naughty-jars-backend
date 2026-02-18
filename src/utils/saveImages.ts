@@ -20,7 +20,7 @@ export const saveImages = async (
     quality = 80
   } = options;
 
-  const uploadDir = path.join(__dirname, `../public/uploads/${folder}`);
+  const uploadDir = path.join(__dirname, `../uploads/${folder}`);
   
   // Ensure directory exists
   if (!fs.existsSync(uploadDir)) {

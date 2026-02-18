@@ -14,6 +14,8 @@ export interface IProduct extends Document {
   isFeatured: boolean;
   tags: string[];
   status: "draft" | "published" | "archived";
+  likes: mongoose.Types.ObjectId[];  // Array of user IDs who liked this product
+  likeCount: number; 
   createdAt: Date;
 }
 
@@ -31,11 +33,15 @@ const ProductSchema: Schema<IProduct> = new Schema<IProduct>(
     stock: { type: Number, default: 0 },
     isFeatured: { type: Boolean, default: false },
     tags: { type: [String], default: [] },
+    
+
     status: { 
       type: String, 
       enum: ["draft", "published", "archived"], 
       default: "draft" 
-    }
+    } ,
+    likes: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    likeCount: { type: Number, default: 0 }
   },
   { timestamps: true }
 );

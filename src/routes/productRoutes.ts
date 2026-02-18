@@ -1,3 +1,4 @@
+// routes/productRoutes.ts
 import { Router } from "express";
 import {
   addProduct,
@@ -14,24 +15,23 @@ import { uploadImages } from "../middlewares/testMulter";
 
 const router = Router();
 
-// Public routes
-router.get("/published", getPublishedProducts);
-router.get("/featured", getFeaturedProducts);
-router.get("/:id", getProductDetails);
+// PUBLIC ROUTES - SPECIFIC FIRST, PARAMETERIZED LAST
+router.get("/published", getPublishedProducts);  // Specific route first
+router.get("/featured", getFeaturedProducts);    // Specific route second
+router.get("/:id", getProductDetails);           // Parameterized route last
 
-// Admin routes with image upload support
-// Use array() instead of fields() for multiple images with same field name
+// ADMIN ROUTES (all protected)
 router.post("/", 
   authenticateJWT, 
   requireAdmin, 
-  uploadImages.array('images', 10), // Changed from fields() to array()
+  uploadImages.array('images', 10), 
   addProduct
 );
 
 router.put("/:id", 
   authenticateJWT, 
   requireAdmin, 
-  uploadImages.array('images', 10), // Changed from fields() to array()
+  uploadImages.array('images', 10), 
   updateProduct
 );
 
