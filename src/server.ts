@@ -21,7 +21,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use(express.static(path.join(__dirname, '../public'))); 
 
 app.use(cors({
-  origin: ["http://localhost:5173", "https://naughtyjars.vercel.app","https://test.naughtyjars.com/"],
+  origin: ["http://localhost:5173", "https://naughtyjars.vercel.app","https://test.naughtyjars.com"],
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 }));
